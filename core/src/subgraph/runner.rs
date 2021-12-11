@@ -193,6 +193,7 @@ where
                             .inputs
                             .store
                             .revert_block_operations(revert_to_ptr, cursor.as_deref())
+                            .await
                         {
                             error!(&logger, "Could not revert block. Retrying"; "error" => %e);
 
@@ -684,14 +685,17 @@ where
 
         let first_error = deterministic_errors.first().cloned();
 
-        match store.transact_block_operations(
-            block_ptr,
-            firehose_cursor,
-            mods,
-            stopwatch,
-            data_sources,
-            deterministic_errors,
-        ) {
+        match store
+            .transact_block_operations(
+                block_ptr,
+                firehose_cursor,
+                mods,
+                stopwatch,
+                data_sources,
+                deterministic_errors,
+            )
+            .await
+        {
             Ok(_) => {
                 // For subgraphs with `nonFatalErrors` feature disabled, we consider
                 // any error as fatal.
