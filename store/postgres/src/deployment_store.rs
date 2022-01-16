@@ -32,7 +32,7 @@ use graph::prelude::{
     anyhow, debug, info, lazy_static, o, warn, web3, ApiSchema, AttributeNames, BlockNumber,
     BlockPtr, CheapClone, DeploymentHash, DeploymentState, Entity, EntityKey, EntityModification,
     EntityQuery, Error, Logger, QueryExecutionError, Schema, StopwatchMetrics, StoreError,
-    StoreEvent, UnfailOutcome, Value, BLOCK_NUMBER_MAX,
+    StoreEvent, UnfailOutcome, Value,
 };
 use graph_graphql::prelude::api_schema;
 use web3::types::Address;
@@ -913,26 +913,26 @@ impl DeploymentStore {
         Ok(Some(finisher.finish()))
     }
 
+    /// Get the entity matching `key` from the deployment `site`. Only
+    /// consider entities as of the given `block`
     pub(crate) fn get(
         &self,
         site: Arc<Site>,
         key: &EntityKey,
+        block: BlockNumber,
     ) -> Result<Option<Entity>, StoreError> {
         let conn = self.get_conn()?;
         let layout = self.layout(&conn, site)?;
-
-        // We should really have callers pass in a block number; but until
-        // that is fully plumbed in, we just use the biggest possible block
-        // number so that we will always return the latest version,
-        // i.e., the one with an infinite upper bound
-
-        layout.find(&conn, &key.entity_type, &key.entity_id, BLOCK_NUMBER_MAX)
+        layout.find(&conn, &key.entity_type, &key.entity_id, block)
     }
 
+    /// Retrieve all the entities matching `ids_for_type` from the
+    /// deployment `site`. Only consider entities as of the given `block`
     pub(crate) fn get_many(
         &self,
         site: Arc<Site>,
         ids_for_type: &BTreeMap<&EntityType, Vec<&str>>,
+        block: BlockNumber,
     ) -> Result<BTreeMap<EntityType, Vec<Entity>>, StoreError> {
         if ids_for_type.is_empty() {
             return Ok(BTreeMap::new());
@@ -940,7 +940,7 @@ impl DeploymentStore {
         let conn = self.get_conn()?;
         let layout = self.layout(&conn, site)?;
 
-        layout.find_many(&conn, ids_for_type, BLOCK_NUMBER_MAX)
+        layout.find_many(&conn, ids_for_type, block)
     }
 
     pub(crate) fn get_changes(
@@ -1188,9 +1188,10 @@ impl DeploymentStore {
     pub(crate) async fn load_dynamic_data_sources(
         &self,
         id: DeploymentHash,
+        block: BlockNumber,
     ) -> Result<Vec<StoredDynamicDataSource>, StoreError> {
         self.with_conn(move |conn, _| {
-            conn.transaction(|| crate::dynds::load(conn, id.as_str()))
+            conn.transaction(|| crate::dynds::load(&conn, id.as_str(), block))
                 .map_err(Into::into)
         })
         .await
