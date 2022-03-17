@@ -1,3 +1,4 @@
+use crate::subgraph::context::IndexingContext;
 use crate::subgraph::error::BlockProcessingError;
 use crate::subgraph::inputs::IndexingInputs;
 use crate::subgraph::metrics::RunnerMetrics;
@@ -44,7 +45,8 @@ lazy_static! {
 }
 
 pub struct SubgraphRunner<C: Blockchain, T: RuntimeHostBuilder<C>> {
-    state: IndexingState<T, C>,
+    ctx: IndexingContext<T, C>,
+    state: IndexingState,
     inputs: Arc<IndexingInputs<C>>,
     logger: Logger,
     metrics: RunnerMetrics,
@@ -57,12 +59,14 @@ where
 {
     pub fn new(
         inputs: IndexingInputs<C>,
-        state: IndexingState<T, C>,
+        ctx: IndexingContext<T, C>,
+        state: IndexingState,
         logger: Logger,
         metrics: RunnerMetrics,
     ) -> Self {
         Self {
             inputs: Arc::new(inputs),
+            ctx,
             state,
             logger,
             metrics,
@@ -113,7 +117,7 @@ where
             let block_stream_cancel_handle = block_stream_canceler.handle();
 
             let stream_metrics = self.metrics.stream.clone();
-            let filter = self.state.filter.clone();
+            let filter = self.ctx.filter.clone();
             let stream_inputs = self.inputs.clone();
             let mut block_stream = new_block_stream(stream_inputs, filter)
                 .await?
@@ -124,7 +128,7 @@ where
 
             // Keep the stream's cancel guard around to be able to shut it down
             // when the subgraph deployment is unassigned
-            self.state
+            self.ctx
                 .instances
                 .write()
                 .unwrap()
@@ -181,7 +185,7 @@ where
                         // will be broader than necessary. This is not ideal for performance, but is not
                         // incorrect since we will discard triggers that match the filters but do not
                         // match any data sources.
-                        self.state.instance.revert_data_sources(subgraph_ptr.number);
+                        self.ctx.instance.revert_data_sources(subgraph_ptr.number);
                         self.state.entity_lfu_cache = LfuCache::new();
                         continue;
                     }
@@ -276,7 +280,7 @@ where
 
                         if needs_restart && !self.inputs.static_filters {
                             // Cancel the stream for real
-                            self.state
+                            self.ctx
                                 .instances
                                 .write()
                                 .unwrap()
@@ -361,7 +365,7 @@ where
                                 // Retry logic below:
 
                                 // Cancel the stream for real.
-                                self.state
+                                self.ctx
                                     .instances
                                     .write()
                                     .unwrap()
@@ -432,7 +436,7 @@ where
         };
 
         // There are currently no other causality regions since offchain data is not supported.
-        let causality_region = CausalityRegion::from_network(self.state.instance.network());
+        let causality_region = CausalityRegion::from_network(self.ctx.instance.network());
 
         // Process events one after the other, passing in entity operations
         // collected previously to every new event being processed
@@ -684,7 +688,7 @@ where
 
         for trigger in triggers {
             block_state = self
-                .state
+                .ctx
                 .instance
                 .process_trigger(
                     &self.logger,
@@ -722,7 +726,7 @@ where
             let data_source = C::DataSource::try_from(info)?;
 
             // Try to create a runtime host for the data source
-            let host = self.state.instance.add_dynamic_data_source(
+            let host = self.ctx.instance.add_dynamic_data_source(
                 &logger,
                 data_source.clone(),
                 self.inputs.templates.clone(),
@@ -779,7 +783,7 @@ where
         }
 
         // Merge filters from data sources into the block stream builder
-        self.state.filter.extend(data_sources.iter());
+        self.ctx.filter.extend(data_sources.iter());
     }
 }
 
