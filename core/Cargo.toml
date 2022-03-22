@@ -28,6 +28,8 @@ tower = { git = "https://github.com/leoyvens/tower.git", features = ["util", "li
 graph-runtime-wasm = { path = "../runtime/wasm" }
 # tower-test = { git = "https://github.com/tower-rs/tower.git" } # DEV DEP
 tower-test = { git = "https://github.com/leoyvens/tower.git", branch = "fix-call-all-pending-stream"} # DEV DEP
+cid = "0.8.3"
+anyhow = "1.0"
 
 [dev-dependencies]
 graph-mock = { path = "../mock" }

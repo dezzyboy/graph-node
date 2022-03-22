@@ -103,7 +103,7 @@ async fn select_fastest_client_with_stat(
             retry_policy(do_retry, "object.stat", &logger).run(move || {
                 let path = path.clone();
                 let c = c.cheap_clone();
-                async move { c.object_stat(path, timeout).map_ok(move |s| (s, i)).await }
+                async move { c.object_stat(&path, timeout).map_ok(move |s| (s, i)).await }
             })
         })
         .collect();
@@ -230,7 +230,7 @@ impl LinkResolverTrait for LinkResolver {
                 let this = this.clone();
                 let logger = logger.clone();
                 async move {
-                    let data = client.cat_all(path.clone(), timeout).await?.to_vec();
+                    let data = client.cat_all(&path, timeout).await?.to_vec();
 
                     // Only cache files if they are not too large
                     if data.len() <= *MAX_IPFS_CACHE_FILE_SIZE as usize {
@@ -269,7 +269,7 @@ impl LinkResolverTrait for LinkResolver {
             read_u64_from_env(MAX_IPFS_MAP_FILE_SIZE_VAR).or(Some(DEFAULT_MAX_IPFS_MAP_FILE_SIZE));
         restrict_file_size(path, &stat, &max_file_size)?;
 
-        let mut stream = client.cat(path.to_string()).await?.fuse().boxed().compat();
+        let mut stream = client.cat(path, None).await?.fuse().boxed().compat();
 
         let mut buf = BytesMut::with_capacity(1024);
 

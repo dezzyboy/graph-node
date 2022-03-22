@@ -324,7 +324,7 @@ pub trait ChainStore: Send + Sync + 'static {
     /// missing blocks in the chain store.
     ///
     /// Returns an error if the offset would reach past the genesis block.
-    fn ancestor_block(
+    async fn ancestor_block(
         &self,
         block_ptr: BlockPtr,
         offset: BlockNumber,

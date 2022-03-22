@@ -28,6 +28,7 @@ pub struct AddResponse {
     pub size: String,
 }
 
+/// Reference type, clones will share the connection pool.
 #[derive(Clone)]
 pub struct IpfsClient {
     base: Arc<Uri>,
@@ -61,7 +62,7 @@ impl IpfsClient {
     /// Calls `object stat`.
     pub async fn object_stat(
         &self,
-        path: String,
+        path: &str,
         timeout: Duration,
     ) -> Result<ObjectStatResponse, reqwest::Error> {
         self.call(self.url("object/stat", path), None, Some(timeout))
@@ -71,7 +72,7 @@ impl IpfsClient {
     }
 
     /// Download the entire contents.
-    pub async fn cat_all(&self, cid: String, timeout: Duration) -> Result<Bytes, reqwest::Error> {
+    pub async fn cat_all(&self, cid: &str, timeout: Duration) -> Result<Bytes, reqwest::Error> {
         self.call(self.url("cat", cid), None, Some(timeout))
             .await?
             .bytes()
@@ -80,10 +81,11 @@ impl IpfsClient {
 
     pub async fn cat(
         &self,
-        cid: String,
+        cid: &str,
+        timeout: Option<Duration>,
     ) -> Result<impl Stream<Item = Result<Bytes, reqwest::Error>>, reqwest::Error> {
         Ok(self
-            .call(self.url("cat", cid), None, None)
+            .call(self.url("cat", cid), None, timeout)
             .await?
             .bytes_stream())
     }
@@ -103,7 +105,7 @@ impl IpfsClient {
             .await
     }
 
-    fn url(&self, route: &'static str, arg: String) -> String {
+    fn url(&self, route: &'static str, arg: &str) -> String {
         // URL security: We control the base and the route, user-supplied input goes only into the
         // query parameters.
         format!("{}api/v0/{}?arg={}", self.base, route, arg)

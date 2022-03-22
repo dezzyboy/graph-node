@@ -41,6 +41,7 @@ pub use prometheus;
 pub use semver;
 pub use slog;
 pub use stable_hash;
+pub use tokio;
 pub use tokio_stream;
 pub use url;
 
