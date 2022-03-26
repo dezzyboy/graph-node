@@ -8,7 +8,7 @@ use graph::env::env_var;
 use graph::prelude::{
     BlockNumber, Entity, MetricsRegistry, Schema, SubgraphStore as _, BLOCK_NUMBER_MAX,
 };
-use graph::slog::info;
+use graph::slog::{debug, info};
 use graph::util::bounded_queue::BoundedQueue;
 use graph::{
     cheap_clone::CheapClone,
@@ -196,6 +196,7 @@ impl SyncStore {
         firehose_cursor: Option<&str>,
     ) -> Result<(), StoreError> {
         self.retry("revert_block_operations", || {
+            debug!(self.logger, "Revert block"; "block_number" => block_ptr_to.number, "block_hash" => block_ptr_to.hash_hex());
             let event = self.writable.revert_block_operations(
                 self.site.clone(),
                 block_ptr_to.clone(),
@@ -264,6 +265,8 @@ impl SyncStore {
         data_sources: &[StoredDynamicDataSource],
         deterministic_errors: &[SubgraphError],
     ) -> Result<(), StoreError> {
+        debug!(self.logger, "Transact block"; "block_number" => block_ptr_to.number, "block_hash" => block_ptr_to.hash_hex());
+
         fn same_subgraph(mods: &[EntityModification], id: &DeploymentHash) -> bool {
             mods.iter().all(|md| &md.entity_key().subgraph_id == id)
         }
@@ -434,7 +437,7 @@ enum Request {
 }
 
 impl Request {
-    fn execute(&self) -> Result<(), StoreError> {
+    fn execute(&self, logger: Logger) -> Result<(), StoreError> {
         match self {
             Request::Write {
                 store,
@@ -444,19 +447,25 @@ impl Request {
                 mods,
                 data_sources,
                 deterministic_errors,
-            } => store.transact_block_operations(
-                block_ptr_to,
-                firehose_cursor.as_deref(),
-                mods,
-                stopwatch,
-                data_sources,
-                deterministic_errors,
-            ),
+            } => {
+                debug!(logger, "Execute transact"; "block_number" => block_ptr_to.number, "block_hash" => block_ptr_to.hash_hex());
+                store.transact_block_operations(
+                    block_ptr_to,
+                    firehose_cursor.as_deref(),
+                    mods,
+                    stopwatch,
+                    data_sources,
+                    deterministic_errors,
+                )
+            }
             Request::Revert {
                 store,
                 block_ptr,
                 firehose_cursor,
-            } => store.revert_block_operations(block_ptr.clone(), firehose_cursor.as_deref()),
+            } => {
+                debug!(logger, "Execute revert"; "block_number" => block_ptr.number, "block_hash" => block_ptr.hash_hex());
+                store.revert_block_operations(block_ptr.clone(), firehose_cursor.as_deref())
+            }
         }
     }
 }
@@ -502,7 +511,8 @@ impl Queue {
                 // the write transaction commits, causing them to return
                 // incorrect results.
                 let req = queue.queue.peek().await;
-                let res = graph::spawn_blocking_allow_panic(move || req.execute()).await;
+                let logger2 = logger.clone();
+                let res = graph::spawn_blocking_allow_panic(move || req.execute(logger2)).await;
                 // The request has been handled. It's now safe to remove it
                 // from the queue
                 queue.queue.pop().await;
@@ -759,6 +769,7 @@ impl Writer {
 
     async fn write(
         &self,
+        logger: &Logger,
         block_ptr_to: BlockPtr,
         firehose_cursor: Option<String>,
         mods: Vec<EntityModification>,
@@ -776,6 +787,7 @@ impl Writer {
                 &deterministic_errors,
             ),
             Writer::Async(queue) => {
+                debug!(logger, "Queue transact"; "block_number" => block_ptr_to.number, "block_hash" => block_ptr_to.hash_hex());
                 let req = Request::Write {
                     store: queue.store.cheap_clone(),
                     stopwatch: queue.stopwatch.cheap_clone(),
@@ -792,12 +804,14 @@ impl Writer {
 
     async fn revert(
         &self,
+        logger: &Logger,
         block_ptr_to: BlockPtr,
         firehose_cursor: Option<&str>,
     ) -> Result<(), StoreError> {
         match self {
             Writer::Sync(store) => store.revert_block_operations(block_ptr_to, firehose_cursor),
             Writer::Async(queue) => {
+                debug!(logger, "Queue revert"; "block_number" => block_ptr_to.number, "block_hash" => block_ptr_to.hash_hex());
                 let firehose_cursor = firehose_cursor.map(|c| c.to_string());
                 let req = Request::Revert {
                     store: queue.store.cheap_clone(),
@@ -907,7 +921,9 @@ impl WritableStoreTrait for WritableStore {
         *self.block_ptr.lock().unwrap() = Some(block_ptr_to.clone());
         *self.block_cursor.lock().unwrap() = firehose_cursor.map(|c| c.to_string());
 
-        self.writer.revert(block_ptr_to, firehose_cursor).await
+        self.writer
+            .revert(&self.store.logger, block_ptr_to, firehose_cursor)
+            .await
     }
 
     fn unfail_deterministic_error(
@@ -959,6 +975,7 @@ impl WritableStoreTrait for WritableStore {
     ) -> Result<(), StoreError> {
         self.writer
             .write(
+                &self.store.logger,
                 block_ptr_to.clone(),
                 firehose_cursor.clone(),
                 mods,
