@@ -19,8 +19,9 @@ services:
       postgres_pass: let-me-in
       postgres_db: graph-node
       ipfs: 'ipfs:5001'
-      ethereum: 'mainnet:http://host.docker.internal:8545'
+      ethereum: 'godwoken:no_eip1898,archive,traces:https://godwoken-testnet-web3-v1-rpc.ckbapp.dev'
       GRAPH_LOG: info
+      GRAPH_GETH_ETH_CALL_ERRORS: 'revert'
   ipfs:
     image: ipfs/go-ipfs:v0.4.23
     ports:
