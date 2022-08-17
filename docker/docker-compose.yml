@@ -32,7 +32,7 @@ services:
       postgres_pass: let-me-in
       postgres_db: graph-node
       ipfs: 'ipfs:5001'
-      ethereum: 'godwoken:no_eip1898,archive,traces:https://godwoken-testnet-v1.ckbapp.dev metertest:https://rpctest.meter.io'
+      ethereum: 'godwoken:no_eip1898,archive,traces:https://v1.mainnet.godwoken.io/rpc'
       GRAPH_LOG: info
       GRAPH_GETH_ETH_CALL_ERRORS: 'revert'
   ipfs:
